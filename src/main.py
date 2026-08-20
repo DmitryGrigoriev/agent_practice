@@ -1,10 +1,10 @@
-from tools import read_json
-from langchain.agents import create_agent
-
-from langchain_mistralai import ChatMistralAI
-
 import os
 from dotenv import load_dotenv
+
+from langchain.agents import create_agent
+from langchain_mistralai import ChatMistralAI
+
+from tools import read_json, summarize_article
 
 load_dotenv()
 if "MISTRAL_API_KEY" not in os.environ:
@@ -19,22 +19,50 @@ def main():
         
     agent = create_agent(
         model=llm,
-        tools=[read_json]
+        tools=[
+            read_json,
+            summarize_article
+        ]
     )
     
-    result = agent.invoke(
+    #result = agent.invoke(
+    #    {
+    #        "messages": [
+    #            {
+    #                "role": "user",
+    #                "content": "Прочитай файл data/articles.json и кратко суммаризируй статью с id=1"
+    #            }
+    #        ]
+    #    }
+    #)
+    
+    for step in agent.stream(
         {
-            "messages": [
-                {
-                    "role": "user",
-                    "content": "Прочитай файл data/articles.json и скажи, сколько в нем статей?"
-                }
-            ]
-        }
-    )
+            "messages":
+                [
+                    {
+                        "role": "user",
+                        "content": (
+                                    "Прочитай файл data/articles.json. "
+                                    "Для каждой статьи вызови summarize_article. "
+                                    "Суммаризируй все 10 статей. "
+                )
+                    }
+                ]
+        },
+        stream='updates'
+    ):
+        print(step)
     
-    return result
+    #or message in result["messages"]:
+    #   print(type(message).__name__)
+
+    #   if hasattr(message, "tool_calls"):
+    #       print(message.tool_calls)
+
+    #   print(message.content)
+    #   print("-" * 50)
     
 
 if __name__ == "__main__":
-    print(main())
+    main()
