@@ -1,50 +1,66 @@
 import json
 import os
+import time
+
 from dotenv import load_dotenv
-
-
 from langchain.tools import tool
 from langchain_mistralai import ChatMistralAI
 
 load_dotenv()
-if "MISTRAL_API_KEY" not in os.environ:
-    os.environ['MISTRAL_API_KEY'] = os.getenv("MISTRAL_API_KEY")
+mistral_api_key = os.getenv("MISTRAL_API_KEY")
 
-@tool
-def read_json(file_path: str) -> list[dict]:
-    """
-    Read articles from json path.
-    Args:
-        file_path: path to json file
-    Returns:
-        List of articles dict
-    """
-    with open(file_path, "r", encoding='utf-8') as f:
-        data = json.load(f)
+if not mistral_api_key:
+    raise ValueError("API keys are not configured")
     
-    if isinstance(data, dict):
-        raise "Unknown format. Should be dict"
-    
-    return data
-
-
 @tool
-def summarize_article(text: str) -> str:
+def summarize_article(id: str, title: str, text: str) -> dict:
     """
     Create a short summary of one article.
     Args:
-        text: text of an article.
+        id: id of one article.
+        title: title of one article.
+        text: text of one article.
     Return:
-        Summarized text of an article.
+        dict with id, title, summary of a text.
     """
     
+    start = time.perf_counter()
+
     summarize_llm = ChatMistralAI(
         model="mistral-small-latest",
-        temperature=0
+        api_key=mistral_api_key,
+        temperature=0,
+        max_tokens=100,
+        timeout=120,
+        max_retries=3
     )
-    
+
     response = summarize_llm.invoke(
-        f"Сделай краткую суммаризацию следующую текста:\n\n{text}"
+        f"""
+        Сожми текст до 2 предложений и максимум 45 слов.
+
+        Передай только:
+        1. основную мысль;
+        2. 1–2 самых важных факта.
+
+        Большинство чисел, сроков, лимитов и технических деталей нужно отбросить.
+        Не перечисляй несколько однотипных показателей.
+        Не пытайся сохранить все важные детали исходника.
+        Цель — сильное информационное сжатие, а не сокращённый пересказ.
+
+        Текст:
+        {text}
+        """    
     )
     
-    return response.content
+    elapsed = time.perf_counter() - start
+    
+    print(f"SUMMARY id={id}: {elapsed:.2f} sec")
+
+    return {
+        "id": id,
+        "title": title,
+        "summary": response.content,
+        "status": "summary_ready",
+        "next_action": "save_result"
+    }
