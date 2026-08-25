@@ -17,3 +17,6 @@ venv/
 
 # Data
 data/*.json
+
+# Resukt
+results/*.json
