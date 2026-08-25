@@ -41,38 +41,62 @@ def read_json(
 
     for article in articles:
         if article["id"] == str(article_id):
-            return article
+            return {
+            "id": str(article["id"]),
+            "title": article["title"],
+            "text": article["text"],
+            "status": "article_loaded",
+            "next_action": "summarize_article",
+        }
 
     raise ValueError(f"Article with id={article_id} not found")
 
 @mcp.tool()
-def save_result(file_path: str, article_summary: dict | list[dict]) -> str:
+def save_result(
+    file_path: str,
+    article_summary: dict | list[dict],
+) -> dict:
     """
-    Save data with summarized articles to json.
+    Save one summarized article to a JSON file.
+
     Args:
-        file_path: path to save json
-        data: list of dicts of summarized articles
-    Return:
-        Instruction for LLM to save json.
+        file_path: Path to the output JSON file.
+        article_summary: Summary of one article as a dict
+            or as a one-item list containing a dict.
+
+    Returns:
+        Result of saving and instruction for the agent to continue.
     """
-    
-    PROJECT_ROOT = Path(__file__).resolve().parent.parent
-    file_path = PROJECT_ROOT / file_path
-    
-    if os.path.exists(file_path):
-        with open(file_path, "r", encoding='utf-8') as f:
+
+    project_root = Path(__file__).resolve().parent.parent
+    output_path = project_root / file_path
+
+    if isinstance(article_summary, list):
+        if len(article_summary) != 1:
+            raise ValueError("Expected exactly one article summary")
+        article_summary = article_summary[0]
+
+    if output_path.exists():
+        with open(output_path, "r", encoding="utf-8") as f:
             data = json.load(f)
-        data.append(article_summary)
     else:
-        data = [article_summary]
-    
-    with open(file_path, "w", encoding='utf-8') as f:
+        data = []
+
+    data.append(
+        {
+            "id": article_summary["id"],
+            "title": article_summary["title"],
+            "summary": article_summary["summary"]
+        }
+    )
+
+    with open(output_path, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
-        
+
     return {
         "saved_id": article_summary["id"],
         "status": "saved",
-        "instruction": "Continue with the next unprocessed article id."
+        "instruction": "Continue with the next unprocessed article id.",
     }
 
 if __name__ == "__main__":

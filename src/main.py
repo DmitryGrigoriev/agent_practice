@@ -10,7 +10,7 @@ from langchain_mistralai import ChatMistralAI
 from langchain_mcp_adapters.client import MultiServerMCPClient
 from langchain_groq import ChatGroq
 
-from tools import summarize_article
+from .tools import summarize_article
 
 load_dotenv()
 mistral_api_key = os.getenv("MISTRAL_API_KEY")
@@ -41,8 +41,7 @@ async def main():
     
     agent_llm = ChatGroq(
     model="qwen/qwen3.6-27b",
-    api_key=os.environ["GROQ_API_KEY"],
-    temperature=0,
+    api_key=groq_api_key,
     timeout=30,
     max_retries=3,
 )
@@ -69,9 +68,25 @@ async def main():
     {messages}
     """
     
+    prompt =    """
+                Сначала вызови read_json без article_id из data/articles.json, чтобы получить только список id и title статей.
+
+                Затем обработай все полученные id строго по одному.
+
+                Для каждого id:
+                1. вызови read_json с article_id для получения полного текста только этой статьи;
+                2. сразу вызови summarize_article;
+                3. после получения результата сразу вызови save_result. Результат сохрани в results/results.json;
+                4. только после успешного сохранения переходи к следующему id.
+                
+                Не завершай работу, пока не обработаешь все id.
+                Не запрашивай полные тексты нескольких статей одновременно.
+                """
+    
+    
     summarize_llm = ChatMistralAI(
         model="mistral-small-latest",
-        api_key=mistral_api_key
+        api_key=mistral_api_key,
         temperature=0,
         timeout=120,
         max_retries=3
@@ -93,32 +108,13 @@ async def main():
         ]
     )
     
-    await agent.ainvoke(
-            {
-                    "messages":
-                        [
-                           {
-                                "role": "user",
-                                "content": (
-                                            """
-                                            Сначала вызови read_json без article_id из data/articles.json, чтобы получить только список id и title статей.
-
-                                            Затем обработай все полученные id строго по одному.
-
-                                            Для каждого id:
-                                            1. вызови read_json с article_id для получения полного текста только этой статьи;
-                                            2. сразу вызови summarize_article;
-                                            3. после получения результата сразу вызови save_result. Результат сохрани в results/results.json;
-                                            4. только после успешного сохранения переходи к следующему id.
-                                            
-                                            Не завершай работу, пока не обработаешь все id.
-                                            Не запрашивай полные тексты нескольких статей одновременно.
-                                            """
-                        )
-                            }
-                        ]
-                }
-    )
+    async for step in agent.astream(
+        {"messages": [{"role": "user", "content": prompt}]}
+    ):
+        if "model" in step:
+            message = step["model"]["messages"][-1]
+            print("MODEL CONTENT:", message.content)
+            print("TOOL CALLS:", message.tool_calls)
 
 
 if __name__ == "__main__":
